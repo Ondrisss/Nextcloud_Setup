@@ -65,8 +65,6 @@ install() {
     # 5. Установка PHP
     echo "Установка PHP..."
     apt install -y software-properties-common || handle_error "Установка зависимостей"
-    add-apt-repository ppa:ondrej/php -y || handle_error "Добавление репозитория PHP"
-    apt update || handle_error "Обновление пакетов"
 
     apt install -y php${PHP_VERSION} php${PHP_VERSION}-{curl,gd,mbstring,xml,zip,mysql,intl,imagick,bcmath,gmp,apcu,redis} \
     || handle_error "Установка PHP"
