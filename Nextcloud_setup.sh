@@ -45,6 +45,12 @@ mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost',
 mysql -e "DROP DATABASE IF EXISTS test;" || handle_error "MariaDB secure 3"
 mysql -e "FLUSH PRIVILEGES;" || handle_error "MariaDB secure 4"
 
+# Удаление существующей базы данных Nextcloud (если есть)
+echo "Проверка существующей базы данных..."
+mysql -e "DROP DATABASE IF EXISTS nextcloud;" || handle_error "Drop existing DB"
+mysql -e "DROP USER IF EXISTS 'nextcloud'@'localhost';" || handle_error "Drop existing user"
+mysql -e "FLUSH PRIVILEGES;" || handle_error "Flush privileges after cleanup"
+
 # Создание базы данных
 echo "Создание базы данных..."
 mysql -e "CREATE DATABASE nextcloud;" || handle_error "DB creation"
