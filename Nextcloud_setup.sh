@@ -41,7 +41,7 @@ systemctl enable --now mariadb || handle_error "ошибка запуска Mari
 # Настройка MariaDB
 echo "Настройка базы данных..."
 mysql -e "CREATE DATABASE IF NOT EXISTS nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;" || handle_error "ошибка создания БД"
-mysql -e "CREATE USER IF NOT EXISTS 'Киextcloud'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';" || handle_error "ошибка создания пользователя"
+mysql -e "CREATE USER IF NOT EXISTS 'nextcloud'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';" || handle_error "ошибка создания пользователя"
 mysql -e "GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'localhost';" || handle_error "ошибка назначения прав"
 mysql -e "FLUSH PRIVILEGES;" || handle_error "ошибка обновления привилегий"
 
