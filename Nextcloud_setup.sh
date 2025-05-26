@@ -11,37 +11,8 @@ PHP_VERSION="8.2"
 # Функция для обработки ошибок
 handle_error() {
     echo "Ошибка при выполнении: $1" >&2
-    cleanup
+    echo "Рекомендуется выполнить скрипт очистки: sudo ./nextcloud_cleanup.sh"
     exit 1
-}
-
-# Функция полной очистки
-cleanup() {
-    echo "Выполняется очистка системы..."
-    
-    # Остановка сервисов
-    systemctl stop apache2 2>/dev/null
-    systemctl stop mariadb 2>/dev/null
-    
-    # Удаление Nextcloud
-    rm -rf /var/www/nextcloud 2>/dev/null
-    
-    # Удаление репозиториев
-    rm -f /etc/apt/sources.list.d/php.list 2>/dev/null
-    rm -f /etc/apt/trusted.gpg.d/php.gpg 2>/dev/null
-    
-    # Удаление пакетов
-    apt purge -y apache2* mariadb* php* libapache2* certbot* python3-certbot* 2>/dev/null
-    apt autoremove -y 2>/dev/null
-    
-    # Удаление cron
-    crontab -u www-data -r 2>/dev/null
-    
-    # Удаление БД
-    mysql -e "DROP DATABASE IF EXISTS nextcloud;" 2>/dev/null
-    mysql -e "DROP USER IF EXISTS 'nextcloud'@'localhost';" 2>/dev/null
-    
-    echo "Очистка завершена."
 }
 
 # Установка Certbot
@@ -60,12 +31,13 @@ install_certbot() {
 }
 
 # Основная функция установки
-install_nextcloud() {
-    # Перехват ошибок и прерываний
-    trap 'handle_error "Прерывание установки"' INT TERM
-    trap 'handle_error "Ошибка установки"' ERR
-
-    echo "Начало установки Nextcloud..."
+install() {
+    echo "=== Начало установки Nextcloud ==="
+    
+    # Проверка прав root
+    if [ "$(id -u)" != "0" ]; then
+        handle_error "этот скрипт должен быть запущен от root"
+    fi
 
     # 1. Обновление системы
     echo "Обновление пакетов..."
@@ -145,23 +117,15 @@ EOF
     || handle_error "Настройка cron"
 
     # Успешное завершение
-    echo "=================================================="
-    echo "Установка Nextcloud завершена успешно!"
+    echo "=== Установка завершена успешно! ==="
     echo "URL: https://${DOMAIN}"
     echo "Пользователь: ${NEXTCLOUD_USER}"
     echo "Пароль: ${ADMIN_PASSWORD}"
     echo "Пароль БД: ${DB_PASSWORD}"
-    echo "=================================================="
-
-    # Отключение обработчиков ошибок после успешной установки
-    trap - ERR INT TERM
 }
 
-# Запуск установки
-install_nextcloud
-
-# Отключение очистки при нормальном завершении
-trap - EXIT
+# Вызов основной функции
+install
 
 
 
