@@ -1,80 +1,86 @@
 #!/bin/bash
 
 # Конфигурация
-# Генерация случайного пароля для базы данных
 DB_PASSWORD=$(openssl rand -base64 12)
-# Имя пользователя для входа в Nextcloud
 NEXTCLOUD_USER="admin"
-# Генерация случайного пароля для администратора Nextcloud
 ADMIN_PASSWORD=$(openssl rand -base64 12)
-# Запрос домена у пользователя для настройки Certbot
-DOMAIN=$(read -p "Введите домен сайта(для Certbot):" answer)
-# Путь к каталогу данных Nextcloud
+read -p "Введите домен сайта (для Certbot): " DOMAIN
 DATA_DIR="/var/www/nextcloud/data"
 
 # Настройки PHP
-# Максимальный размер загружаемого файла
 PHP_UPLOAD_LIMIT="16G"
-# Максимальный размер POST-запроса
 PHP_POST_LIMIT="16G"
-# Лимит памяти для PHP
 PHP_MEMORY_LIMIT="512M"
-# Автоматическое определение пути к php.ini на основе версии PHP
-PHP_INI_PATH="/etc/php/$(php -v 2>/dev/null | grep -oP 'PHP \K\d+\.\d+' || echo '8.2')/apache2/php.ini"
+PHP_VERSION="8.2"  # Явно указываем версию PHP для совместимости
 
-# Проверка, что скрипт запущен от root
+# Проверка root
 if [ "$(id -u)" != "0" ]; then
    echo "Этот скрипт должен быть запущен от root" 1>&2
    exit 1
 fi
 
+# Функция для обработки ошибок
+handle_error() {
+    echo "Ошибка при выполнении команды: $1"
+    exit 1
+}
+
 # Обновление системы
 echo "Обновление системы..."
-apt update && apt upgrade -y
+apt update && apt upgrade -y || handle_error "system update"
 
 # Установка Apache
 echo "Установка Apache..."
-apt install apache2 -y
+apt install -y apache2 || handle_error "Apache installation"
 systemctl enable --now apache2
 
 # Установка MariaDB
 echo "Установка MariaDB..."
-apt install mariadb-server -y
+apt install -y mariadb-server || handle_error "MariaDB installation"
 systemctl enable --now mariadb
 
 # Настройка безопасности MariaDB
-mysql -e "DELETE FROM mysql.user WHERE User='';"
-mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
-mysql -e "DROP DATABASE IF EXISTS test;"
-mysql -e "FLUSH PRIVILEGES;"
+mysql -e "DELETE FROM mysql.user WHERE User='';" || handle_error "MariaDB secure 1"
+mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" || handle_error "MariaDB secure 2"
+mysql -e "DROP DATABASE IF EXISTS test;" || handle_error "MariaDB secure 3"
+mysql -e "FLUSH PRIVILEGES;" || handle_error "MariaDB secure 4"
 
-# Создание базы данных для Nextcloud
+# Создание базы данных
 echo "Создание базы данных..."
-mysql -e "CREATE DATABASE nextcloud;"
-mysql -e "CREATE USER 'nextcloud'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';"
-mysql -e "GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'localhost';"
-mysql -e "FLUSH PRIVILEGES;"
+mysql -e "CREATE DATABASE nextcloud;" || handle_error "DB creation"
+mysql -e "CREATE USER 'nextcloud'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';" || handle_error "DB user creation"
+mysql -e "GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'localhost';" || handle_error "DB privileges"
+mysql -e "FLUSH PRIVILEGES;" || handle_error "DB flush"
 
-# Установка PHP и необходимых модулей
-echo "Установка PHP..."
-apt install -y php php-curl php-gd php-mbstring php-xml php-zip php-mysql php-intl \
-php-imagick php-bcmath php-gmp php-apcu php-redis
+# Установка PHP
+echo "Добавление репозитория PHP..."
+apt install -y software-properties-common || handle_error "software-properties-common"
+add-apt-repository ppa:ondrej/php -y || handle_error "PHP repo"
+apt update || handle_error "apt update after PHP repo"
 
-# Настройка лимитов PHP
+echo "Установка PHP и модулей..."
+apt install -y php${PHP_VERSION} php${PHP_VERSION}-curl php${PHP_VERSION}-gd \
+php${PHP_VERSION}-mbstring php${PHP_VERSION}-xml php${PHP_VERSION}-zip \
+php${PHP_VERSION}-mysql php${PHP_VERSION}-intl php${PHP_VERSION}-imagick \
+php${PHP_VERSION}-bcmath php${PHP_VERSION}-gmp php${PHP_VERSION}-apcu \
+php${PHP_VERSION}-redis || handle_error "PHP packages"
+
+# Настройка PHP
+PHP_INI_PATH="/etc/php/${PHP_VERSION}/apache2/php.ini"
 echo "Настройка PHP-лимитов..."
-sed -i "s/^\(;\?\)upload_max_filesize =.*/upload_max_filesize = ${PHP_UPLOAD_LIMIT}/" $PHP_INI_PATH
-sed -i "s/^\(;\?\)post_max_size =.*/post_max_size = ${PHP_POST_LIMIT}/" $PHP_INI_PATH
-sed -i "s/^\(;\?\)memory_limit =.*/memory_limit = ${PHP_MEMORY_LIMIT}/" $PHP_INI_PATH
+sed -i "s/^\(;\?\)upload_max_filesize =.*/upload_max_filesize = ${PHP_UPLOAD_LIMIT}/" "$PHP_INI_PATH"
+sed -i "s/^\(;\?\)post_max_size =.*/post_max_size = ${PHP_POST_LIMIT}/" "$PHP_INI_PATH"
+sed -i "s/^\(;\?\)memory_limit =.*/memory_limit = ${PHP_MEMORY_LIMIT}/" "$PHP_INI_PATH"
 
-# Загрузка и установка Nextcloud
+# Установка Nextcloud
 echo "Установка Nextcloud..."
-cd /var/www/
-wget https://download.nextcloud.com/server/releases/latest.zip
-unzip latest.zip
-chown -R www-data:www-data nextcloud  # Установка прав для веб-сервера
+cd /var/www/ || handle_error "cd /var/www"
+wget https://download.nextcloud.com/server/releases/latest.zip || handle_error "Nextcloud download"
+unzip latest.zip || handle_error "Nextcloud unzip"
+chown -R www-data:www-data nextcloud || handle_error "chown nextcloud"
 rm latest.zip
 
-# Настройка виртуального хоста Apache для Nextcloud
+# Настройка Apache
 echo "Настройка Apache..."
 cat > /etc/apache2/sites-available/nextcloud.conf <<EOF
 <VirtualHost *:80>
@@ -89,28 +95,43 @@ cat > /etc/apache2/sites-available/nextcloud.conf <<EOF
 </VirtualHost>
 EOF
 
-# Активация сайта и модулей Apache
-a2ensite nextcloud.conf
-a2enmod rewrite headers env dir mime
-systemctl restart apache2
+a2ensite nextcloud.conf || handle_error "a2ensite"
+a2enmod rewrite headers env dir mime || handle_error "a2enmod"
+systemctl restart apache2 || handle_error "apache restart"
 
-# Опциональная установка SSL с помощью Certbot
+# Установка Certbot
+install_certbot() {
+    echo "Установка Certbot через Snap..."
+    if ! command -v snap &> /dev/null; then
+        apt install -y snapd || return 1
+    fi
+    snap install core || return 1
+    snap refresh core || return 1
+    snap install --classic certbot || return 1
+    ln -s /snap/bin/certbot /usr/bin/certbot || return 1
+    return 0
+}
+
+# Опциональная установка SSL
 read -p "Установить SSL с помощью Certbot? (y/n): " ssl_choice
 if [[ $ssl_choice =~ ^[Yy]$ ]]; then
-    apt install -y certbot python3-certbot-apache
-    certbot --apache -d ${DOMAIN} --non-interactive --agree-tos --email admin@${DOMAIN}
+    if ! install_certbot; then
+        echo "Не удалось установить Certbot через Snap, попробуем альтернативный метод..."
+        apt install -y certbot python3-certbot-apache || handle_error "Certbot installation"
+    fi
+    certbot --apache -d ${DOMAIN} --non-interactive --agree-tos --email admin@${DOMAIN} || handle_error "Certbot execution"
 fi
 
-# Настройка cron для автоматического выполнения задач Nextcloud
+# Настройка cron
 echo "Настройка cron..."
-(crontab -u www-data -l 2>/dev/null; echo "*/5  *  *  *  * php -f /var/www/nextcloud/cron.php") | crontab -u www-data -
+(crontab -u www-data -l 2>/dev/null; echo "*/5  *  *  *  * php -f /var/www/nextcloud/cron.php") | crontab -u www-data - || handle_error "cron setup"
 
-# Вывод итоговой информации
+# Итоговая информация
 echo ""
 echo "=================================================="
 echo "Установка Nextcloud завершена!"
 echo "Доступные данные:"
-echo "URL: http://${DOMAIN}"
+echo "URL: https://${DOMAIN}"
 echo "Администратор: ${NEXTCLOUD_USER}"
 echo "Пароль администратора: ${ADMIN_PASSWORD}"
 echo "Пароль базы данных: ${DB_PASSWORD}"
