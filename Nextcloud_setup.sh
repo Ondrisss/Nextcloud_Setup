@@ -48,8 +48,6 @@ mysql -e "FLUSH PRIVILEGES;" || handle_error "ошибка обновления 
 # Установка PHP и модулей
 echo "Установка PHP и модулей..."
 apt install -y software-properties-common || handle_error "ошибка установки зависимостей"
-add-apt-repository ppa:ondrej/php -y || handle_error "ошибка добавления репозитория"
-apt update || handle_error "ошибка обновления пакетов"
 apt install -y php${PHP_VERSION} php${PHP_VERSION}-{curl,gd,mbstring,xml,zip,mysql,intl,imagick,bcmath,gmp,apcu,redis} || handle_error "ошибка установки PHP"
 
 # Настройка PHP
