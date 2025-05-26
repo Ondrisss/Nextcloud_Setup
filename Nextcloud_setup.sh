@@ -10,7 +10,7 @@ fi
 DB_PASSWORD=$(openssl rand -base64 12)
 NEXTCLOUD_USER="admin"
 ADMIN_PASSWORD=$(openssl rand -base64 12)
-read -p "Введите домен для Nextcloud (например, cloud.example.com): " DOMAIN
+read -p "Введите домен сайта (для Certbot): " DOMAIN
 DATA_DIR="/var/www/nextcloud/data"
 PHP_VERSION="8.2"
 
@@ -41,7 +41,7 @@ systemctl enable --now mariadb || handle_error "ошибка запуска Mari
 # Настройка MariaDB
 echo "Настройка базы данных..."
 mysql -e "CREATE DATABASE IF NOT EXISTS nextcloud CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;" || handle_error "ошибка создания БД"
-mysql -e "CREATE USER IF NOT EXISTS 'nextcloud'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';" || handle_error "ошибка создания пользователя"
+mysql -e "CREATE USER IF NOT EXISTS 'Киextcloud'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';" || handle_error "ошибка создания пользователя"
 mysql -e "GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'localhost';" || handle_error "ошибка назначения прав"
 mysql -e "FLUSH PRIVILEGES;" || handle_error "ошибка обновления привилегий"
 
@@ -95,12 +95,23 @@ fi
 echo "Настройка cron-заданий..."
 (crontab -u www-data -l 2>/dev/null; echo "*/5 * * * * php -f /var/www/nextcloud/cron.php") | crontab -u www-data - || handle_error "ошибка настройки cron"
 
-echo "=== Установка Nextcloud завершена успешно! ==="
-echo "Доступные данные:"
+sudo a2dissite 000-default.conf
+sudo a2ensite nextcloud.conf
+sudo systemctl restart apache2
+
+echo "========================================================"
+echo "           НАСТРОЙКИ ДЛЯ ПЕРВОГО ВХОДА В NEXTCLOUD       "
+echo "========================================================"
 echo "URL: https://${DOMAIN}"
-echo "Администратор: ${NEXTCLOUD_USER}"
-echo "Пароль: ${ADMIN_PASSWORD}"
+echo "Логин: ${NEXTCLOUD_USER}"
+echo "Пароль администратора: ${ADMIN_PASSWORD}"
 echo "Пароль БД: ${DB_PASSWORD}"
+echo "Хост БД: localhost"
+echo "Имя БД: nextcloud"
+echo "Путь к данным: ${DATA_DIR}"
+echo "Версия PHP: ${PHP_VERSION}"
+
+
 
 
 
